@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Русская Рулетка</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body { 
+            background-color: #2b2d31; 
+            color: white; 
+            font-family: Arial, sans-serif; 
+            text-align: center; 
+            margin: 0; 
+            padding: 20px; 
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+        h2 { text-transform: uppercase; margin-bottom: 40px; }
+        
+        .wheel-container { position: relative; width: 320px; height: 320px; margin-bottom: 40px; }
+        #wheel { width: 100%; height: 100%; border-radius: 50%; box-shadow: 0 0 20px rgba(0,0,0,0.6); border: 8px solid #1a1a1a; box-sizing: border-box; }
+        .pointer { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 20px solid transparent; border-right: 20px solid transparent; border-top: 40px solid #ffcc00; z-index: 10; filter: drop-shadow(0px 4px 4px rgba(0,0,0,0.5)); }
+
+        button { width: 90%; max-width: 320px; padding: 18px; border-radius: 12px; border: none; font-size: 18px; background-color: #ffcc00; color: black; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        button:disabled { background-color: #666; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+    <h2>РУССКАЯ РУЛЕТКА</h2>
+    
+    <div class="wheel-container">
+        <div class="pointer"></div>
+        <canvas id="wheel" width="320" height="320"></canvas>
+    </div>
+
+    <button id="spinBtn">Крутить!</button>
+
+    <script>
+        let tg = window.Telegram.WebApp;
+        tg.expand();
+        
+        const canvas = document.getElementById('wheel');
+        const ctx = canvas.getContext('2d');
+        const wheelNumbers = [0, 21, 2, 19, 4, 17, 6, 15, 8, 13, 10, 11, 12, 9, 14, 7, 16, 5, 18, 3, 20, 1, 22];
+        const numSegments = wheelNumbers.length;
+        const segmentAngle = (2 * Math.PI) / numSegments;
+        const radius = canvas.width / 2;
+        let currentRotation = 0;
+
+        function drawWheel() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.translate(radius, radius);
+            
+            for (let i = 0; i < numSegments; i++) {
+                const num = wheelNumbers[i];
+                let color = "#1e1e1e";
+                if (num === 0) color = "#4caf50";
+                else if (num % 2 === 0) color = "#d93838";
+
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.arc(0, 0, radius, i * segmentAngle, (i + 1) * segmentAngle);
+                ctx.fillStyle = color;
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.save();
+                ctx.rotate(i * segmentAngle + segmentAngle / 2);
+                ctx.textAlign = "right";
+                ctx.fillStyle = "white";
+                ctx.font = "bold 18px Arial";
+                ctx.fillText(num, radius - 20, 6);
+                ctx.restore();
+            }
+            ctx.translate(-radius, -radius);
+        }
+        drawWheel();
+
+        document.getElementById('spinBtn').addEventListener('click', () => {
+            const btn = document.getElementById('spinBtn');
+            btn.disabled = true;
+            btn.innerText = "Вращаем...";
+
+            // Рандомим число прямо здесь
+            const winningNum = Math.floor(Math.random() * 23);
+            const winningIndex = wheelNumbers.indexOf(winningNum);
+
+            // Анимация
+            const degreesPerSegment = 360 / numSegments;
+            const targetRotation = 270 - (winningIndex * degreesPerSegment) - (degreesPerSegment / 2);
+            const extraSpins = 360 * 6; // 6 оборотов
+            const finalRotation = currentRotation + extraSpins + (targetRotation - (currentRotation % 360));
+            currentRotation = finalRotation;
+
+            canvas.style.transition = 'transform 4s cubic-bezier(0.25, 0.1, 0.25, 1)';
+            canvas.style.transform = `rotate(${finalRotation}deg)`;
+
+            // Ждем завершения анимации
+            setTimeout(() => {
+                // Отправляем ТОЛЬКО выпавшее число, бот сам все посчитает
+                tg.sendData(JSON.stringify({
+                    type: "roulette_spin_done",
+                    winning_number: winningNum
+                }));
+                tg.close(); // Автоматически закрываем Mini App
+            }, 4500); 
+        });
+    </script>
+</body>
+</html>
+
