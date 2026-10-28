@@ -69,7 +69,7 @@
             <div class="balance-item"><div class="chip-icon" style="position:static; width: 20px; height: 20px; background: #8e44ad;"></div><span>Ваша ставка</span><strong id="current-bet">0</strong></div>
         </div>
         <div class="timer-close">
-            <div class="close-btn" onclick="window.Telegram.WebApp.close()">✕</div>
+            <div class="close-btn" onclick="sendDataAndClose()">✕</div>
         </div>
     </div>
 
@@ -111,33 +111,21 @@
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    // Читаем ID игрока из ссылки
+    // Читаем фишки из ссылки, которую передал бот (?chips=500)
     const urlParams = new URLSearchParams(window.location.search);
-    const userId = parseInt(urlParams.get('uid')) || tg?.initDataUnsafe?.user?.id || 0;
+    let chips = parseInt(urlParams.get('chips')) || 0;
     
-    // ВАЖНО: Замени localhost на ссылку твоего Flask-сервера (например, на Render.com или IP)
-    const SERVER_URL = "http://localhost:8000"; 
+    // Показываем баланс
+    document.getElementById('chips-balance').textContent = chips;
 
-    let chips = 0;
     let currentBet = 0;
     let selectedCell = null;
     let isSpinning = false;
+    let totalBalance = chips; // Запоминаем текущий баланс для отправки
+
     const totalNumbers = 23;
     const sectorAngle = 360 / totalNumbers;
     const redNumbers = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21];
-
-    // Загружаем баланс фишек из базы (через Flask)
-    async function loadChips() {
-        try {
-            const res = await fetch(`${SERVER_URL}/get_chips?uid=${userId}`);
-            const data = await res.json();
-            chips = data.chips || 0;
-            document.getElementById('chips-balance').textContent = chips;
-        } catch (e) {
-            document.getElementById('chips-balance').textContent = "Ошибка сети";
-        }
-    }
-    loadChips();
 
     // Расстановка цифр на колесе
     const wheelNumbersContainer = document.getElementById('wheel-numbers');
@@ -191,12 +179,12 @@
     const betInput = document.getElementById('bet-amount');
     betInput.addEventListener('click', () => {
         if (isSpinning) return;
-        let val = prompt("Введите сумму ставки (у вас " + chips + " фишек):", currentBet);
+        let val = prompt("Введите сумму ставки (у вас " + totalBalance + " фишек):", currentBet);
         if (val !== null && !isNaN(val)) setBetAmount(parseInt(val));
     });
 
     function setBetAmount(amount) {
-        if (amount > chips) return alert("Недостаточно фишек!");
+        if (amount > totalBalance) return alert("Недостаточно фишек!");
         if (amount <= 0) return alert("Ставка должна быть больше 0!");
         currentBet = amount;
         document.getElementById('current-bet').textContent = currentBet;
@@ -215,34 +203,15 @@
         }
     }
 
-    document.getElementById('make-bet-btn').addEventListener('click', async () => {
+    document.getElementById('make-bet-btn').addEventListener('click', () => {
         if (isSpinning || selectedCell === null || currentBet === 0) return;
         isSpinning = true;
         
-        // Отправляем ставку на сервер (списываем фишки)
-        try {
-            const res = await fetch(`${SERVER_URL}/place_bet`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({uid: userId, amount: currentBet})
-            });
-            const data = await res.json();
-            
-            if (data.status !== "success") {
-                alert(data.error || "Ошибка ставки");
-                isSpinning = false;
-                return;
-            }
-            
-            chips = data.new_chips;
-            document.getElementById('chips-balance').textContent = chips;
-            
-        } catch (e) {
-            alert("Ошибка сервера");
-            isSpinning = false;
-            return;
-        }
+        // Списываем ставку
+        totalBalance -= currentBet;
+        document.getElementById('chips-balance').textContent = totalBalance;
 
+        // Выбираем выигрышный номер
         let winNumber = Math.floor(Math.random() * 23);
         let centerAngle = (winNumber * sectorAngle) + (sectorAngle / 2);
         let targetAngle = (360 - centerAngle) + (360 * 5);
@@ -255,7 +224,7 @@
         }, 5000);
     });
 
-    async function checkWin(number) {
+    function checkWin(number) {
         let winAmount = 0;
         let isWin = false;
         let resultColor = '';
@@ -272,26 +241,16 @@
             winAmount = currentBet * 2; isWin = true;
         }
 
-        // Отправляем результат на сервер (начисляем выигрыш)
-        try {
-            const res = await fetch(`${SERVER_URL}/win_bet`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({uid: userId, win_amount: isWin ? winAmount : 0})
-            });
-            const data = await res.json();
-            chips = data.new_chips;
-            document.getElementById('chips-balance').textContent = chips;
-        } catch (e) {
-            console.log("Ошибка обновления баланса");
-        }
-
+        // Начисляем выигрыш
         if (isWin) {
+            totalBalance += winAmount;
+            document.getElementById('chips-balance').textContent = totalBalance;
             showResult("ПОБЕДА!", `Выпало ${number} (${resultColor}). Вы выиграли ${winAmount} фишек!`);
         } else {
             showResult("ПРОИГРЫШ", `Выпало ${number} (${resultColor}). Вы потеряли ${currentBet} фишек.`);
         }
 
+        // Сброс
         currentBet = 0;
         selectedCell = null;
         document.getElementById('current-bet').textContent = 0;
@@ -316,6 +275,18 @@
         wheel.style.transform = 'rotate(0deg)';
         setTimeout(() => { wheel.style.transition = 'transform 5s cubic-bezier(0.17, 0.67, 0.1, 1)'; }, 50);
     }
+
+    // Функция для отправки данных в бота и закрытия
+    function sendDataAndClose() {
+        // Отправляем итоговый баланс фишек в бота
+        tg.sendData(JSON.stringify({ chips: totalBalance }));
+        tg.close();
+    }
+
+    // Перехватываем закрытие WebApp (если нажмут "Назад")
+    tg.onEvent('mainButtonClicked', () => {
+        sendDataAndClose();
+    });
 </script>
 </body>
 </html>
