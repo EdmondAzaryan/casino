@@ -133,7 +133,11 @@
         let numText = document.createElement('div');
         numText.className = 'num-text';
         numText.textContent = i;
+        
+        // Вычисляем угол, чтобы цифра стояла по центру сектора
         let centerAngle = (i * sectorAngle) + (sectorAngle / 2);
+        
+        // Ставим цифру и разворачиваем её, чтобы она смотрела от центра
         let translatePx = window.innerWidth <= 1000 ? 140 : 180;
         numText.style.transform = `rotate(${centerAngle}deg) translate(${translatePx}px, -10px) rotate(-${centerAngle}deg)`;
         wheelNumbersContainer.appendChild(numText);
@@ -212,10 +216,17 @@
         document.getElementById('chips-balance').textContent = totalBalance;
 
         // Выбираем выигрышный номер
-        let winNumber = Math.floor(Math.random() * 23);
-        let centerAngle = (winNumber * sectorAngle) + (sectorAngle / 2);
-        let targetAngle = (360 - centerAngle) + (360 * 5);
+        let winNumber = Math.floor(Math.random() * 23); 
         
+        // МАТЕМАТИКА ПОВОРОТА (Исправлена):
+        // Чтобы выигрышный сектор оказался под стрелкой (сверху), 
+        // нужно повернуть колесо так, чтобы центр этого сектора указывал на 0 градусов (верх).
+        // Сектор 0 начинается с 0 градусов.
+        let targetAngle = 360 - ((winNumber * sectorAngle) + (sectorAngle / 2)); 
+        
+        // Добавляем 5 полных оборотов для красоты
+        targetAngle += 360 * 5;
+
         const wheel = document.getElementById('wheel');
         wheel.style.transform = `rotate(${targetAngle}deg)`;
 
@@ -283,7 +294,7 @@
         tg.close();
     }
 
-    // Перехватываем закрытие WebApp (если нажмут "Назад")
+    // Перехватываем закрытие WebApp (если нажмут "Назад" в телеге)
     tg.onEvent('mainButtonClicked', () => {
         sendDataAndClose();
     });
