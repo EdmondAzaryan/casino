@@ -113,15 +113,14 @@
 
     // Читаем фишки из ссылки, которую передал бот (?chips=500)
     const urlParams = new URLSearchParams(window.location.search);
-    let chips = parseInt(urlParams.get('chips')) || 0;
+    let totalBalance = parseInt(urlParams.get('chips')) || 0;
     
     // Показываем баланс
-    document.getElementById('chips-balance').textContent = chips;
+    document.getElementById('chips-balance').textContent = totalBalance;
 
     let currentBet = 0;
     let selectedCell = null;
     let isSpinning = false;
-    let totalBalance = chips; // Запоминаем текущий баланс для отправки
 
     const totalNumbers = 23;
     const sectorAngle = 360 / totalNumbers;
@@ -218,14 +217,9 @@
         // Выбираем выигрышный номер
         let winNumber = Math.floor(Math.random() * 23); 
         
-        // МАТЕМАТИКА ПОВОРОТА (Исправлена):
-        // Чтобы выигрышный сектор оказался под стрелкой (сверху), 
-        // нужно повернуть колесо так, чтобы центр этого сектора указывал на 0 градусов (верх).
-        // Сектор 0 начинается с 0 градусов.
+        // Математика поворота (Исправлена)
         let targetAngle = 360 - ((winNumber * sectorAngle) + (sectorAngle / 2)); 
-        
-        // Добавляем 5 полных оборотов для красоты
-        targetAngle += 360 * 5;
+        targetAngle += 360 * 5; // 5 оборотов для анимации
 
         const wheel = document.getElementById('wheel');
         wheel.style.transform = `rotate(${targetAngle}deg)`;
@@ -244,19 +238,28 @@
         else if (redNumbers.includes(number)) resultColor = 'red';
         else resultColor = 'black';
 
+        // Логика выигрыша
         if (selectedCell === number) {
-            winAmount = currentBet * 36; isWin = true;
+            winAmount = currentBet * 36; // x36 (возврат ставки + выигрыш)
+            isWin = true;
         } else if (selectedCell === 'red' && resultColor === 'red') {
-            winAmount = currentBet * 2; isWin = true;
+            winAmount = currentBet * 2; // x2 (возврат ставки + выигрыш)
+            isWin = true;
         } else if (selectedCell === 'black' && resultColor === 'black') {
-            winAmount = currentBet * 2; isWin = true;
+            winAmount = currentBet * 2; // x2 (возврат ставки + выигрыш)
+            isWin = true;
         }
 
         // Начисляем выигрыш
         if (isWin) {
-            totalBalance += winAmount;
+            // Если ставил 10 и выиграл, то winAmount = 20.
+            // Мы возвращаем в totalBalance ставку (10) + чистый выигрыш (10) = 20.
+            totalBalance += winAmount; 
             document.getElementById('chips-balance').textContent = totalBalance;
-            showResult("ПОБЕДА!", `Выпало ${number} (${resultColor}). Вы выиграли ${winAmount} фишек!`);
+            
+            // В сообщении пишем "чистый" выигрыш, чтобы игрок видел, сколько он заработал СВЕРХУ
+            let profit = winAmount - currentBet;
+            showResult("ПОБЕДА!", `Выпало ${number} (${resultColor}). Вы выиграли ${profit} фишек!`);
         } else {
             showResult("ПРОИГРЫШ", `Выпало ${number} (${resultColor}). Вы потеряли ${currentBet} фишек.`);
         }
@@ -291,7 +294,11 @@
     function sendDataAndClose() {
         // Отправляем итоговый баланс фишек в бота
         tg.sendData(JSON.stringify({ chips: totalBalance }));
-        tg.close();
+        
+        // Ждем 500мс, чтобы данные точно ушли, и закрываем
+        setTimeout(() => {
+            tg.close();
+        }, 500);
     }
 
     // Перехватываем закрытие WebApp (если нажмут "Назад" в телеге)
